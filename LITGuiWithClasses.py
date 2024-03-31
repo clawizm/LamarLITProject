@@ -9,6 +9,8 @@ import socket
 import pickle
 from LITSubsystemInterface import LITSubsystemData
 import math
+import os
+import numpy as np
 # used to prevent popup froms occur while debugging and poential errors that are inevitable but caught with try and excepts from also creating annoying popups
 sg.set_options(suppress_raise_key_errors=True, suppress_error_popups=True, suppress_key_guessing=True)
 
@@ -22,13 +24,13 @@ class LITGUI(LITGuiEventHandler):
     """
 
 
-    def __init__(self, lit_subsystem_data: typing.Union[LITSubsystemData, list[LITSubsystemData]]):
+    def __init__(self, lit_subsystem_data: typing.Union[LITSubsystemData, list[LITSubsystemData]], background_images_dir: str):
         """Creates a GUI displaying Camera Feeds for each LITSubsystemData instance passed.
         
         Parameters:
         - lit_subsystem_data (typing.Union[LITSubsystemData, list[LITSubsystemData]]): Will create a seperate section in the GUI for each subsystem passed, whether in a list of Length N, or 
         if a single instance of LITSubsystemData is passed."""
-        LITGuiEventHandler.__init__(self)
+        LITGuiEventHandler.__init__(self, background_images_dir)
         self.led_tuples_dict_of_list: dict[str, list[tuple[int, int]]] = {}
         self.object_detection_model_dict: dict[str, typing.Union[ObjectDetectionModel, None]] = {}
         self.lit_subsystem_dict: dict[str, LITSubsystemData] = {}
@@ -128,10 +130,10 @@ class LITGUI(LITGuiEventHandler):
     def create_image_preview_section(self):
         """Creates the image element for the current Subsystem Frame being created. This is video feed will be displayed."""
         if self.camera_idx == 0:
-            camera_preview = [sg.Image(filename=r'BackgroundImages\Jason.png',
+            camera_preview = [sg.Image(filename=r'BackgroundImages\gon.png',
                                         key=f'-CAMERA_{self.camera_idx}_FEED-', size=(self.gui_image_preview_width, self.gui_image_preview_height))] 
         else:
-            camera_preview = [sg.Image(filename=r'BackgroundImages\Lebron.png', 
+            camera_preview = [sg.Image(filename=r'BackgroundImages\killua.png', 
                                        key=f'-CAMERA_{self.camera_idx}_FEED-', size=(self.gui_image_preview_width, self.gui_image_preview_height))]
 
         return camera_preview
@@ -194,6 +196,7 @@ class LITGUI(LITGuiEventHandler):
     def create_gui_from_camera_instance(self, lit_subsystem_data: LITSubsystemData)->list[list[sg.Frame]]:
         """Creates a LITSubsystem Frame which is displayed in the GUI. Called when user provides only one LITSubsystem data instance to the constructor."""
         return [[self.create_camera_frame(lit_subsystem_data)]]
+
 
 
 

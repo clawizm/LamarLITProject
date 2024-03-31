@@ -426,50 +426,25 @@ class ObjectDetectionModel:
                     curr_auto_led_data_list.append(curr_led_data)
             except:
                 continue
-            #encapsulate into hand detection function, CALLED ON EACH OBJECT IN FRAME
             try:
                 cropped_image = self.frame[self.ymin: self.ymax, self.xmin: self.xmax]
-                cropped_image_rgb = cv2.cvtColor(cropped_image, cv2.COLOR_BGR2RGB)
-                results = self.hands.process(cropped_image_rgb)
+                results = self.find_hands_in_object_detected(cropped_image)
                 if results.multi_hand_landmarks:
                     hands_in_frame = True
-                    for hand_landmarks in results.multi_hand_landmarks:
-
-                        mp.solutions.drawing_utils.draw_landmarks(cropped_image, hand_landmarks, self.mp_hands.HAND_CONNECTIONS)
-                    
-                        landmark_list = calc_landmark_list(cropped_image, hand_landmarks)
-
-                        # Conversion to relative coordinates / normalized coordinates
-                        pre_processed_landmark_list = pre_process_landmark(
-                            landmark_list)
-
-                        self.hand_sign_id = self.keypoint_classifier(pre_processed_landmark_list)
-                    if self.previous_gestures != self.keypoint_classifier_labels[self.hand_sign_id]:   
-                        if self.previous_gestures and self.gesture_start_time:
-                            duration = time.time() - self.gesture_start_time 
-                            print(f'Detected {self.previous_gestures} for {duration}')
-                            if duration > 3 and self.previous_gestures == 'Love':
-                                self.gui_window.write_event_value(f"-CAMERA_{self.camera_index}_TURNONALLLEDs-", 'Update')
-                            self.gesture_start_time = None
+                    hand_sign_id = self.draw_hand_landmarks_and_make_gesture_inference(results=results, cropped_image=cropped_image)
+                    hand_sign_detected_label = self.keypoint_classifier_labels[hand_sign_id]
+                    if self.previous_gestures != hand_sign_detected_label:   
                         self.gesture_start_time = time.time()
-                        self.previous_gestures = self.keypoint_classifier_labels[self.hand_sign_id]
+                        self.previous_gestures = hand_sign_detected_label
                     elif self.previous_gestures and self.gesture_start_time:
                         duration = time.time() - self.gesture_start_time 
-                        if duration > 3:
+                        if duration > 2:
                             self.handle_hand_gesture_control_event(duration)
             except:
-                print('Hand Error')
-        ###ENCAPSULATE INTO FUNCTION, USED TO HANDLE IF THERE IS NO ONE IN FRAME OR NO HANDS IN FRAME
-        if len(classes) == 0 or not hands_in_frame:
-            if self.previous_gestures and self.gesture_start_time:
-                duration = time.time() - self.gesture_start_time 
-                print(f'Detected {self.previous_gestures} for {duration}')
-                if duration > 3 and self.previous_gestures == 'Love':
-                    self.gui_window.write_event_value(f"-CAMERA_{self.camera_index}_TURNONALLLEDs-", True)
-                self.gesture_start_time = None
-            self.previous_gestures = None
+                pass
 
-        
+        self.check_for_no_hands_or_objects_detected(len(classes), hands_in_frame)        
+
         try:
             if self.client_conn:
                 self.system_led_data.auto_led_data_list = curr_auto_led_data_list  
@@ -483,16 +458,51 @@ class ObjectDetectionModel:
                 image_bytes = cv2.imencode('.png', self.frame)[1].tobytes()
                 self.gui_window.write_event_value(f"UPDATE_{self.camera_index}_FRAMES", image_bytes)
             except:
-                print('Brandon')
-        else:
-            print('No Gui Window')
-            
+                pass
+
         t2 = cv2.getTickCount()
         time1 = (t2-self.t1)/self.freq
         self.frame_rate_calc= 1/time1
         if cv2.waitKey(1) == ord('q'):
             self.video_stream.stop()
         return
+    
+    def check_for_no_hands_or_objects_detected(self, objs_detected: int, hands_in_frame: bool)->None:
+        """Used to restart the timer that is tracking how long a gesture is detected for in the camera feed. If no hands or objects are detected in the frame, by default the timer 
+        will be reset and the previous hand gesture detected will be set to None to reflect the current frame.
+        
+        Parameters:
+        - objs_detected (int): The number of objects detected in the current frame.
+        - hands_in_frame (bool): A flag indicating if any hands were detected in the objects detected in the frame processed."""
+        if objs_detected == 0 or not hands_in_frame:
+            self.gesture_start_time = None
+            self.previous_gestures = None
+        return
+    
+    def draw_hand_landmarks_and_make_gesture_inference(self, results, cropped_image)->int:
+        """After processing a frame this function is used to perform an inference on the results, where we find the various segments of the hand and draw the landmarks, as well as
+        determine the hand gesture found as an integer representing the location on the label found in the list of labels associated with the TFLITE model.
+        
+        Parameters:
+        - results: 
+        - cropped_image: """
+        for hand_landmarks in results.multi_hand_landmarks:
+
+            mp.solutions.drawing_utils.draw_landmarks(cropped_image, hand_landmarks, self.mp_hands.HAND_CONNECTIONS)
+        
+            landmark_list = calc_landmark_list(cropped_image, hand_landmarks)
+
+            # Conversion to relative coordinates / normalized coordinates
+            pre_processed_landmark_list = pre_process_landmark(
+                landmark_list)
+
+            hand_sign_id = self.keypoint_classifier(pre_processed_landmark_list)
+            return hand_sign_id
+        
+    def find_hands_in_object_detected(self, cropped_image):
+        cropped_image_rgb = cv2.cvtColor(cropped_image, cv2.COLOR_BGR2RGB)
+        results = self.hands.process(cropped_image_rgb)
+        return results
     
     def handle_hand_gesture_control_event(self, duration: float):
         if self.previous_gestures == 'Love':
@@ -510,23 +520,23 @@ class ObjectDetectionModel:
 
 
     def handle_l_gesture_event(self, duration: float):
-        if int(duration) % 2 == 1:
+        # if int(duration) % 2 == 1:
             self.gui_window.write_event_value(f"-CAMERA_{self.camera_index}_HANDGESTUREINCREASELEDRANGE-", 1)
 
     def handle_pointer_gesture_event(self, duration: float):
-        if int(duration) % 2 == 1:
+        # if int(duration) % 2 == 1:
             self.gui_window.write_event_value(f"-CAMERA_{self.camera_index}_HANDGESTUREDECREASELEDRANGE-", 1)
 
     def handle_thumbs_down_gesture_event(self, duration: float):
-        if int(duration) % 2 == 1:
+        # if int(duration) % 2 == 1:
             self.gui_window.write_event_value(f"-CAMERA_{self.camera_index}_HANDGESTUREDECREASEBRIGHTNESS-", 1)
 
     def handle_thumbs_up_gesture_event(self, duration: float):
-        if int(duration) % 2 == 1:
+        # if int(duration) % 2 == 1:
             self.gui_window.write_event_value(f"-CAMERA_{self.camera_index}_HANDGESTUREINCREASEBRIGHTNESS-", 1)
     
     def handle_ok_gesture_event(self, duration: float):
-        left_to_right_status = ((duration // 3) % 2) == 1 #This function is only called when duration is > 3 so therefore, we are saying the lights will turn off and on every 3 seconds.
+        left_to_right_status = ((duration // 2) % 2) == 1 #This function is only called when duration is > 3 so therefore, we are saying the lights will turn off and on every 3 seconds.
         if left_to_right_status:
             self.gui_window.write_event_value(f"-CAMERA_{self.camera_index}_HANDGESTURELEDRANGELEFTRIGHT-", True)
         else:
@@ -534,11 +544,11 @@ class ObjectDetectionModel:
 
 
     def handle_love_gesture_event(self, duration: float):
-        all_lights_on_status = ((duration // 3) % 2) == 1 #This function is only called when duration is > 3 so therefore, we are saying the lights will turn off and on every 3 seconds.
+        all_lights_on_status = ((duration // 2) % 2) == 1 #This function is only called when duration is > 3 so therefore, we are saying the lights will turn off and on every 3 seconds.
         self.gui_window.write_event_value(f"-CAMERA_{self.camera_index}_HANDGESTURETURNONALLLEDS-", all_lights_on_status)
         return
     
-    
+
     def set_label_on_obj_in_frame(self, class_idx: int, score: float):
         """Places a label on an object detected in the frame with the name of the object, and the confidence score for the object detected."""
         object_name = self.labels[int(class_idx)] # Look up object name from "labels" array using class index

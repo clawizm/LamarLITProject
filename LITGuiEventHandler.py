@@ -10,6 +10,7 @@ import socket
 import pickle
 from LITSubsystemInterface import LITSubsystemData
 from utils import AutoLEDData, ManualLEDData
+import os
 
 class LITGuiEventHandler:
     """A class handing events with the LITGUI class. The seperation of two allows for this class to be overwritten or manually implemented by other developers to handle their own events in the
@@ -32,11 +33,21 @@ class LITGuiEventHandler:
     camera subsystem, we use an instance of the threading.Lock class for sending data, so that each unqiue connection for cameras in the GUI have the ability to send data autonomously through their respective
     object detection models, and manually through user input in the GUI. This prevents any race conditions from occuring when sending data.
     """
-    def __init__(self):
+    def __init__(self, background_images_dir):
+        self.all_background_images: list[str] = self.get_all_background_images(background_images_dir)
         self.led_tuples_dict_of_list: dict[list[tuple[int, int]]] = {}
         self.object_detection_model_dict: dict[str, ObjectDetectionModel] = {}
         self.lit_subsystem_dict: dict[str, LITSubsystemData] = {}
         self.manual_led_data: ManualLEDData = ManualLEDData()
+
+    def get_all_background_images(self, directory: str)->list[str]:
+        dir_contents = os.listdir(directory)
+        dir_contents_filtered = [os.path.join(directory, file) for file in dir_contents if file.endswith('.png')]
+        return dir_contents_filtered
+    
+    def get_random_image_from_background_image_list(self)->str:
+        random_num = np.random.randint(0, len(self.all_background_images)-1)
+        return self.all_background_images[random_num]
 
     def set_camera_of_event(self):
         """Used to find the camera index for the panel in which the event spawned from. This value is used to apply the setting changed to the correct Subsystem.
@@ -56,7 +67,7 @@ class LITGuiEventHandler:
         else:
             if self.object_detection_model_dict[f'CAMERA_{self.event_camera}']:
                 self.object_detection_model_dict[f'CAMERA_{self.event_camera}'].stop_detection()
-            self.window[f'-CAMERA_{self.event_camera}_FEED-'].update(filename=r'Jason.png', size=(720, 480))
+            self.window[f'-CAMERA_{self.event_camera}_FEED-'].update(filename=self.get_random_image_from_background_image_list(), size=(720, 405))
             self.window[f'-CAMERA_{self.event_camera}_SHOWFEED-'].update(False, disabled=True)
 
         if self.lit_subsystem_dict[f'CAMERA_{self.event_camera}'].client_conn:
@@ -74,7 +85,7 @@ class LITGuiEventHandler:
         else:
             self.object_detection_model_dict[f'CAMERA_{self.event_camera}'].set_window(None)
             # time.sleep(2)
-            self.window[f'-CAMERA_{self.event_camera}_FEED-'].update(filename=r'Lebron.png', size=(720, 480))
+            self.window[f'-CAMERA_{self.event_camera}_FEED-'].update(filename=self.get_random_image_from_background_image_list(), size=(720, 405))
         return
     
     def on_manual_control_event(self):

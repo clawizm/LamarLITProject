@@ -10,9 +10,12 @@ To Do Today 3-26-2024:
 
 This week:
     - Have a way to automatically connect systems
-    - perform more training on the OK, STOP, AND PEACE SIGN
+    - perform more training on hand gestures
+    - Consider removing open and close from the training data, as well as retraining the model without those labels
     - update hand gesture events that update checkboxs to just invert current status
-    
+    - Update the turning off and on of video feeds/autonomous mode to select an image from a random image in the BackgroundImages directory.
+    - Find consisent delay to ensure background image gets updated when turning off camera feed.
+
 Once everything works:
     - Add checkbox showing server connection status, and if server breaks we want to restart server on pi, and then retry to connect to server on computer. If its successful we will update checkbox and disable it.
    

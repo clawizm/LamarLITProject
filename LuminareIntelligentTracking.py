@@ -58,8 +58,9 @@ if __name__ == '__main__':
     else:
         object_detection_model_one = ObjectDetectionModel(model_path=object_detection_tflite_path, use_edge_tpu=False, camera_index=0, label_path=object_detection_label_path, resolution=(720, 405))
         # object_detection_model_two = ObjectDetectionModel(model_path=object_detection_tflite_path, use_edge_tpu=False, camera_index=2, label_path=object_detection_label_path, resolution=(720, 405))
-        # subsystem_one = LITSubsystemData(2, number_of_leds=256, number_of_sections=8)
-        subsystem_two = LITSubsystemData(0,object_detection_model_one, number_of_leds=256, number_of_sections=8)
-        subsystem_list = [subsystem_two]
-        lit_gui = LITGUI(subsystem_list)
+        subsystem_one = LITSubsystemData(2, number_of_leds=256, number_of_sections=8)
+        subsystem_two = LITSubsystemData(0, object_detection_model_one, number_of_leds=256, number_of_sections=8)
+
+        subsystem_list = [subsystem_one, subsystem_two]
+        lit_gui = LITGUI(subsystem_list, background_images_dir=r'BackgroundImages')
         lit_gui.start_event_loop()

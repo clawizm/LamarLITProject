@@ -13,7 +13,7 @@ class LITSubsystemData():
     """A data structure used to store information relevant between the GUI, ObjectDetectionModel used for performing Object Detection on the camera specified, and the potential server the user 
     would like data sent to for addressing the LED subsystems."""
     def __init__(self, camera_idx: int, object_detection_model: typing.Union[ObjectDetectionModel, None] = None, number_of_leds: int = 256,
-                 number_of_sections: int = 8, host: str = None, port: int = None, image_preview_height: int = 480, image_preview_width:int = 640) -> None:
+                 number_of_sections: int = 8, host: str = None, port: int = None, image_preview_height: int = 405, image_preview_width:int = 720) -> None:
         """
         Parameters:
         - camera_idx (int): The USB ID number for the camera of this Subsystem. This is how the device is identified by the OS.
