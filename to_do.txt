@@ -15,6 +15,7 @@ This week:
     - update hand gesture events that update checkboxs to just invert current status
     - Update the turning off and on of video feeds/autonomous mode to select an image from a random image in the BackgroundImages directory.
     - Find consisent delay to ensure background image gets updated when turning off camera feed.
+    - Try using a new, smaller model only for person detection.
 
 Once everything works:
     - Add checkbox showing server connection status, and if server breaks we want to restart server on pi, and then retry to connect to server on computer. If its successful we will update checkbox and disable it.
