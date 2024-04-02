@@ -1,64 +1,15 @@
 import threading
 from threading import Thread
 import cv2
-from queue import Queue
 import numpy as np
 import time
-import pickle
 import socket
 import PySimpleGUI as sg    
 from utils import AutoLEDData
 from tensorflow.lite.python.interpreter import Interpreter 
 from tensorflow.lite.python.interpreter import load_delegate
-import csv
-
 import typing
-from multiprocessing import Process, Queue
 import math
-import mediapipe as mp
-import copy
-import itertools
-
-def pre_process_landmark(landmark_list):
-    temp_landmark_list = copy.deepcopy(landmark_list)
-
-    # Convert to relative coordinates
-    base_x, base_y = 0, 0
-    for index, landmark_point in enumerate(temp_landmark_list):
-        if index == 0:
-            base_x, base_y = landmark_point[0], landmark_point[1]
-
-        temp_landmark_list[index][0] = temp_landmark_list[index][0] - base_x
-        temp_landmark_list[index][1] = temp_landmark_list[index][1] - base_y
-
-    # Convert to a one-dimensional list
-    temp_landmark_list = list(
-        itertools.chain.from_iterable(temp_landmark_list))
-
-    # Normalization
-    max_value = max(list(map(abs, temp_landmark_list)))
-
-    def normalize_(n):
-        return n / max_value
-
-    temp_landmark_list = list(map(normalize_, temp_landmark_list))
-
-    return temp_landmark_list
-
-def calc_landmark_list(image, landmarks):
-    image_width, image_height = image.shape[1], image.shape[0]
-
-    landmark_point = []
-
-    # Keypoint
-    for _, landmark in enumerate(landmarks.landmark):
-        landmark_x = min(int(landmark.x * image_width), image_width - 1)
-        landmark_y = min(int(landmark.y * image_height), image_height - 1)
-        # landmark_z = landmark.z
-
-        landmark_point.append([landmark_x, landmark_y])
-
-    return landmark_point
 
 def focal_length_finder(camera_video_width: int, horizontal_fov: int)->float:
     """Using the width of the video from the camera in pixels and the horizontal field of view of the camera, both in pixels, this functuion returns the focal length in pixels of the camera."""
@@ -132,11 +83,8 @@ def determine_leds_range_for_angle(angle_x: typing.Union[float, int], led_sectio
     while i < len(hfov_range_list)-1:
         if angle_x <= hfov_range_list[i] and angle_x >= hfov_range_list[i+1]:
             return led_sections[i]
-        # elif i == 0 and angle_x <= hfov_range_list[i] and angle_x + (hfov_range_list[i]-hfov_range_list[i+1])  >= hfov_range_list[i+1]:
-        #     return led_sections[i+1]
         i+=1
-    return led_sections[i]
-
+    return None
 
 def estimate_distance(found_width: float, focal_length: float, known_width: float):
     """Estimate the distance of an object based on the width found for the object.
@@ -175,36 +123,11 @@ def calculate_vert_angle(obj_center_y: float, frame_width: int, vfov: int)->floa
     angle = vfov * relative_position
     return angle
 
-class KeyPointClassifier(object):
-    def __init__(
-        self,
-        model_path=r'C:\Users\brand\Documents\seniordesign\OldLITTest\ModelFiles\keypoint_classifier.tflite',
-        num_threads=1,
-    ):
-        self.interpreter = Interpreter(model_path=model_path,
-                                               num_threads=num_threads)
-
-        self.interpreter.allocate_tensors()
-        self.input_details = self.interpreter.get_input_details()
-        self.output_details = self.interpreter.get_output_details()
-
-    def __call__(
-        self,
-        landmark_list,
-    ):
-        input_details_tensor_index = self.input_details[0]['index']
-        self.interpreter.set_tensor(
-            input_details_tensor_index,
-            np.array([landmark_list], dtype=np.float32))
-        self.interpreter.invoke()
-
-        output_details_tensor_index = self.output_details[0]['index']
-
-        result = self.interpreter.get_tensor(output_details_tensor_index)
-
-        result_index = np.argmax(np.squeeze(result))
-
-        return result_index
+class DetectObj:
+    """Used to store the distance, horizontal, and vertical angles of a object detected in the current frame"""
+    def __init__(self, objs_detected_list_dict: list[dict], leds_to_turn_off_list: list[tuple]):
+        self.objs_detected_list_dict = objs_detected_list_dict
+        self.leds_to_turn_off_list = leds_to_turn_off_list
         
 class VideoStream:
     """Camera object that controls video streaming"""
@@ -271,9 +194,7 @@ class ObjectDetectionModel:
 
     def __init__(self, model_path: str, use_edge_tpu: bool, camera_index: int, label_path: str, 
                  min_conf_threshold: float= 0.5,window: typing.Union[sg.Window, None]=None, image_window_name: typing.Union[str, None]=None, 
-                 client_conn: socket.socket = None, thread_lock: threading.Lock = None, ref_person_width: int = 20, hfov: int = 89, vfov:int = 129.46, 
-                 resolution: tuple[int, int] =(640,360), focal_length: float = 0, gesture_tflite_path: str = r'ModelFiles\keypoint_classifier.tflite', 
-                 gesture_label_path: str = r'ModelFiles\keypoint_classifier_label.csv') -> None:
+                 client_conn: socket.socket = None, thread_lock: threading.Lock = None, ref_person_width: int = 20, hfov: int = 89, vfov:int = 129.46, resolution: tuple[int, int] =(640,360), focal_length: float = 0) -> None:
         """Creates an Object for performing object detection on a camera feed. Uses either an EdgeTPU or CPU to perform computations.
         
         Parameters:
@@ -308,17 +229,7 @@ class ObjectDetectionModel:
             self.focal_length = focal_length_finder(resolution[0], hfov)
         else:
             self.focal_length = focal_length
-        self.mp_hands = mp.solutions.hands
-        self.hands = self.mp_hands.Hands(static_image_mode=True, max_num_hands=1, min_detection_confidence=0.3)
-        self.keypoint_classifier = KeyPointClassifier(gesture_tflite_path)
-        with open(gesture_label_path,
-                encoding='utf-8-sig') as f:
-            self.keypoint_classifier_labels = csv.reader(f)
-            self.keypoint_classifier_labels = [
-                row[0] for row in self.keypoint_classifier_labels
-            ]
-        return
-    
+
     def set_led_ranges_for_objects(self, number_of_leds: int, number_of_sections: int):
         self.led_sections = create_led_tuple_range_list(number_of_leds, number_of_sections)
         self.number_of_sections = number_of_sections
@@ -378,8 +289,6 @@ class ObjectDetectionModel:
         and send relevant LED data to the subsystem being controled from this instance."""
 
         self.video_stream.start()
-        self.previous_gestures = None
-        self.gesture_start_time = None
         while self.detection_active.is_set():
             try:
                 self.t1 = cv2.getTickCount()
@@ -404,7 +313,7 @@ class ObjectDetectionModel:
             return
         
         curr_auto_led_data_list = []
-        hands_in_frame = False
+        
         for i in range(len(scores)):
             if (self.labels[int(classes[i])] == 'person') and ((scores[i] > self.min_conf_threshold) and (scores[i] <= 1.0)):      
                 self.get_and_set_current_box_vertices(boxes[i])
@@ -419,6 +328,7 @@ class ObjectDetectionModel:
                 if self.led_sections:
                     distance = estimate_distance(self.current_obj_width, self.video_stream.focal_length, self.ref_person_width)
                     angle_x = calculate_horz_angle(self.current_obj_mid_point_x, self.video_stream.video_width, self.video_stream.hfov)
+                    print(angle_x)
                     angle_y = calculate_vert_angle(self.current_obj_mid_point_y, self.video_stream.video_heigth, self.video_stream.hfov)
                     brightness = brightness_based_on_distance(distance)
                     led_tuple = determine_leds_range_for_angle(angle_x=angle_x, led_sections=self.led_sections, hfov_range_list=self.fov_sections)
@@ -426,25 +336,7 @@ class ObjectDetectionModel:
                     curr_auto_led_data_list.append(curr_led_data)
             except:
                 continue
-            try:
-                cropped_image = self.frame[self.ymin: self.ymax, self.xmin: self.xmax]
-                results = self.find_hands_in_object_detected(cropped_image)
-                if results.multi_hand_landmarks:
-                    hands_in_frame = True
-                    hand_sign_id = self.draw_hand_landmarks_and_make_gesture_inference(results=results, cropped_image=cropped_image)
-                    hand_sign_detected_label = self.keypoint_classifier_labels[hand_sign_id]
-                    if self.previous_gestures != hand_sign_detected_label:   
-                        self.gesture_start_time = time.time()
-                        self.previous_gestures = hand_sign_detected_label
-                    elif self.previous_gestures and self.gesture_start_time:
-                        duration = time.time() - self.gesture_start_time 
-                        if duration > 2:
-                            self.handle_hand_gesture_control_event(duration)
-            except:
-                pass
-
-        self.check_for_no_hands_or_objects_detected(len(classes), hands_in_frame)        
-
+        
         try:
             if self.client_conn:
                 self.system_led_data.auto_led_data_list = curr_auto_led_data_list  
@@ -458,97 +350,17 @@ class ObjectDetectionModel:
                 image_bytes = cv2.imencode('.png', self.frame)[1].tobytes()
                 self.gui_window.write_event_value(f"UPDATE_{self.camera_index}_FRAMES", image_bytes)
             except:
-                pass
-
+                print('Brandon')
+        else:
+            print('No Gui Window')
+            
         t2 = cv2.getTickCount()
         time1 = (t2-self.t1)/self.freq
         self.frame_rate_calc= 1/time1
         if cv2.waitKey(1) == ord('q'):
             self.video_stream.stop()
         return
-    
-    def check_for_no_hands_or_objects_detected(self, objs_detected: int, hands_in_frame: bool)->None:
-        """Used to restart the timer that is tracking how long a gesture is detected for in the camera feed. If no hands or objects are detected in the frame, by default the timer 
-        will be reset and the previous hand gesture detected will be set to None to reflect the current frame.
         
-        Parameters:
-        - objs_detected (int): The number of objects detected in the current frame.
-        - hands_in_frame (bool): A flag indicating if any hands were detected in the objects detected in the frame processed."""
-        if objs_detected == 0 or not hands_in_frame:
-            self.gesture_start_time = None
-            self.previous_gestures = None
-        return
-    
-    def draw_hand_landmarks_and_make_gesture_inference(self, results, cropped_image)->int:
-        """After processing a frame this function is used to perform an inference on the results, where we find the various segments of the hand and draw the landmarks, as well as
-        determine the hand gesture found as an integer representing the location on the label found in the list of labels associated with the TFLITE model.
-        
-        Parameters:
-        - results: 
-        - cropped_image: """
-        for hand_landmarks in results.multi_hand_landmarks:
-
-            mp.solutions.drawing_utils.draw_landmarks(cropped_image, hand_landmarks, self.mp_hands.HAND_CONNECTIONS)
-        
-            landmark_list = calc_landmark_list(cropped_image, hand_landmarks)
-
-            # Conversion to relative coordinates / normalized coordinates
-            pre_processed_landmark_list = pre_process_landmark(
-                landmark_list)
-
-            hand_sign_id = self.keypoint_classifier(pre_processed_landmark_list)
-            return hand_sign_id
-        
-    def find_hands_in_object_detected(self, cropped_image):
-        cropped_image_rgb = cv2.cvtColor(cropped_image, cv2.COLOR_BGR2RGB)
-        results = self.hands.process(cropped_image_rgb)
-        return results
-    
-    def handle_hand_gesture_control_event(self, duration: float):
-        if self.previous_gestures == 'Love':
-            self.handle_love_gesture_event(duration)
-        elif self.previous_gestures.strip() == 'Thumbs Up':
-            self.handle_thumbs_up_gesture_event(duration)
-        elif self.previous_gestures.strip() == 'Thumps Down':
-            self.handle_thumbs_down_gesture_event(duration)
-        elif self.previous_gestures.strip() == 'L':
-            self.handle_l_gesture_event(duration)
-        elif self.previous_gestures.strip() == 'Pointer':
-            self.handle_pointer_gesture_event(duration)
-        elif self.previous_gestures.strip() == 'OK':
-            self.handle_ok_gesture_event(duration)
-
-
-    def handle_l_gesture_event(self, duration: float):
-        # if int(duration) % 2 == 1:
-            self.gui_window.write_event_value(f"-CAMERA_{self.camera_index}_HANDGESTUREINCREASELEDRANGE-", 1)
-
-    def handle_pointer_gesture_event(self, duration: float):
-        # if int(duration) % 2 == 1:
-            self.gui_window.write_event_value(f"-CAMERA_{self.camera_index}_HANDGESTUREDECREASELEDRANGE-", 1)
-
-    def handle_thumbs_down_gesture_event(self, duration: float):
-        # if int(duration) % 2 == 1:
-            self.gui_window.write_event_value(f"-CAMERA_{self.camera_index}_HANDGESTUREDECREASEBRIGHTNESS-", 1)
-
-    def handle_thumbs_up_gesture_event(self, duration: float):
-        # if int(duration) % 2 == 1:
-            self.gui_window.write_event_value(f"-CAMERA_{self.camera_index}_HANDGESTUREINCREASEBRIGHTNESS-", 1)
-    
-    def handle_ok_gesture_event(self, duration: float):
-        left_to_right_status = ((duration // 2) % 2) == 1 #This function is only called when duration is > 3 so therefore, we are saying the lights will turn off and on every 3 seconds.
-        if left_to_right_status:
-            self.gui_window.write_event_value(f"-CAMERA_{self.camera_index}_HANDGESTURELEDRANGELEFTRIGHT-", True)
-        else:
-            self.gui_window.write_event_value(f"-CAMERA_{self.camera_index}_HANDGESTURELEDRANGERIGHTLEFT-", True)
-
-
-    def handle_love_gesture_event(self, duration: float):
-        all_lights_on_status = ((duration // 2) % 2) == 1 #This function is only called when duration is > 3 so therefore, we are saying the lights will turn off and on every 3 seconds.
-        self.gui_window.write_event_value(f"-CAMERA_{self.camera_index}_HANDGESTURETURNONALLLEDS-", all_lights_on_status)
-        return
-    
-
     def set_label_on_obj_in_frame(self, class_idx: int, score: float):
         """Places a label on an object detected in the frame with the name of the object, and the confidence score for the object detected."""
         object_name = self.labels[int(class_idx)] # Look up object name from "labels" array using class index
@@ -677,7 +489,7 @@ class ObjectDetectionModel:
         # Load the TensorFlow Lite model with Edge TPU support.
         interpreter = Interpreter(
             model_path=model_path,
-            experimental_delegates=[load_delegate("edgetpu.dll")]
+            experimental_delegates=[load_delegate('edgetpu.dll')]
         )        
         return interpreter
 
@@ -776,10 +588,4 @@ class ObjectDetectionModel:
 
 
 if __name__ == '__main__':
-    host = '192.168.1.2'
-    port = 5000
-    model_path = r'C:\Users\brand\OneDrive\Documents\SeniorDesign\ModelFiles\detect.tflite'
-    label_path = r'C:\Users\brand\OneDrive\Documents\SeniorDesign\ModelFiles\labelmap.txt'
-    obj_detector_one = ObjectDetectionModel(r'C:\Users\brand\OneDrive\Documents\SeniorDesign\ModelFiles\detect.tflite', False, 0, 
-                                        r'C:\Users\brand\OneDrive\Documents\SeniorDesign\ModelFiles\labelmap.txt')
-    obj_detector_one.start_detection()
+    print('Wrong Script!')

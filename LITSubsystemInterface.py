@@ -3,17 +3,15 @@ import threading
 import pickle
 import socket
 from utils import find_missing_numbers_as_ranges_tuples, is_overlap, SystemLEDData
-import itertools
 from ObjectDetectionModel import ObjectDetectionModel
-import sys
-
+import time
 
 
 class LITSubsystemData():
     """A data structure used to store information relevant between the GUI, ObjectDetectionModel used for performing Object Detection on the camera specified, and the potential server the user 
     would like data sent to for addressing the LED subsystems."""
     def __init__(self, camera_idx: int, object_detection_model: typing.Union[ObjectDetectionModel, None] = None, number_of_leds: int = 256,
-                 number_of_sections: int = 8, host: str = None, port: int = None, image_preview_height: int = 405, image_preview_width:int = 720) -> None:
+                 number_of_sections: int = 8, host: str = None, port: int = None, image_preview_height: int = 480, image_preview_width:int = 640) -> None:
         """
         Parameters:
         - camera_idx (int): The USB ID number for the camera of this Subsystem. This is how the device is identified by the OS.
@@ -26,7 +24,6 @@ class LITSubsystemData():
         """
         self.camera_idx = camera_idx
         self.object_detection_model = object_detection_model
-
         self.number_of_leds = number_of_leds
         self.number_of_sections = number_of_sections
         self.host = host
@@ -35,12 +32,16 @@ class LITSubsystemData():
         self.manual_status: bool = False
         self.auto_status: bool = False
         self.force_all_leds_on: bool = False 
+        self.gui_window = None 
         self.attempt_to_create_client_conn()
         if isinstance(self.object_detection_model, ObjectDetectionModel):
             self.set_object_detection_model(self.object_detection_model)
         else:
             self.image_preview_height = image_preview_height
             self.image_preview_width = image_preview_width
+        # if self.client_conn:
+        #     self.server_listen_thread = threading.Thread(target=self.listen_for_server_response, daemon=True)
+        #     self.server_listen_thread.start()
         return
     
     def set_object_detection_model(self, object_detection_model: ObjectDetectionModel):
@@ -65,18 +66,28 @@ class LITSubsystemData():
         attributes are set to False."""
 
         if self.host and self.port:
-            # try:
-                self.send_lock = threading.Lock()
-                self.client_conn = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                self.client_conn.connect((self.host,self.port))
-                if self.object_detection_model:
-                    self.object_detection_model.set_client_conn(self.client_conn)
-                    self.object_detection_model.set_thread_lock(self.send_lock)
-                return
-            # except:
-                pass
-        self.client_conn = False
-        self.send_lock = False
+            self.send_lock = threading.Lock()
+            self.client_conn = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.client_conn.connect((self.host,self.port))
+            time.sleep(1)
+            while True:
+                data = self.client_conn.recv(4096)
+                if not data:
+                    connection_succesful = False
+                    break
+                if data:
+                    connection_succesful = True
+                    break
+            if not connection_succesful:
+                self.client_conn.close()
+                self.client_conn = False
+                self.send_lock = False            
+        else:
+            self.client_conn = False
+            self.send_lock = False            
+        if self.object_detection_model:
+            self.object_detection_model.set_client_conn(self.client_conn)
+            self.object_detection_model.set_thread_lock(self.send_lock)
         return
 
     def send_data_for_led_addressing(self, manual_event: bool)->None:
@@ -112,11 +123,25 @@ class LITSubsystemData():
 
         
         pickle_data = pickle.dumps(data)
-        if self.send_lock:
-            with self.send_lock:
-                self.client_conn.send(pickle_data)
-        elif self.client_conn:
-            self.client_conn.send(pickle_data)      
+        try:
+            if self.send_lock:
+                with self.send_lock:
+                    self.client_conn.send(pickle_data)
+            elif self.client_conn:
+                self.client_conn.send(pickle_data)      
+        except BrokenPipeError:
+            self.gui_window.write_event_value(f'-SERVER_{self.camera_idx}_DISCONNECTED-', False)
+        except ConnectionResetError:
+            self.gui_window.write_event_value(f'-SERVER_{self.camera_idx}_DISCONNECTED-', False)
         return
     
-
+    
+    def listen_for_server_response(self):
+        """DEPRECIATED, I CAN SEE IF VALUES ARE BEING SENT WITHOUT LISTENING!"""
+        while True:
+            data = self.client_conn.recv(1024)
+            if not data:
+                break
+        self.gui_window.write_event_value(f'-SERVER_{self.camera_idx}_DISCONNECTED-', False)
+        return
+    

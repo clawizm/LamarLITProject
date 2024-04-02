@@ -1,16 +1,9 @@
 import PySimpleGUI as sg
-import cv2
-import numpy as np
 import typing
 import ObjectDetectionModel
 from ObjectDetectionModel import ObjectDetectionModel
-import threading
-import time
-import socket
-import pickle
 from LITSubsystemInterface import LITSubsystemData
 from utils import AutoLEDData, ManualLEDData
-import os
 
 class LITGuiEventHandler:
     """A class handing events with the LITGUI class. The seperation of two allows for this class to be overwritten or manually implemented by other developers to handle their own events in the
@@ -33,22 +26,12 @@ class LITGuiEventHandler:
     camera subsystem, we use an instance of the threading.Lock class for sending data, so that each unqiue connection for cameras in the GUI have the ability to send data autonomously through their respective
     object detection models, and manually through user input in the GUI. This prevents any race conditions from occuring when sending data.
     """
-    def __init__(self, background_images_dir):
-        self.all_background_images: list[str] = self.get_all_background_images(background_images_dir)
+    def __init__(self):
         self.led_tuples_dict_of_list: dict[list[tuple[int, int]]] = {}
         self.object_detection_model_dict: dict[str, ObjectDetectionModel] = {}
         self.lit_subsystem_dict: dict[str, LITSubsystemData] = {}
         self.manual_led_data: ManualLEDData = ManualLEDData()
-
-    def get_all_background_images(self, directory: str)->list[str]:
-        dir_contents = os.listdir(directory)
-        dir_contents_filtered = [os.path.join(directory, file) for file in dir_contents if file.endswith('.png')]
-        return dir_contents_filtered
-    
-    def get_random_image_from_background_image_list(self)->str:
-        random_num = np.random.randint(0, len(self.all_background_images)-1)
-        return self.all_background_images[random_num]
-
+        self.window: sg.Window
     def set_camera_of_event(self):
         """Used to find the camera index for the panel in which the event spawned from. This value is used to apply the setting changed to the correct Subsystem.
         Value is set to the event_camera Attribute."""
@@ -67,7 +50,7 @@ class LITGuiEventHandler:
         else:
             if self.object_detection_model_dict[f'CAMERA_{self.event_camera}']:
                 self.object_detection_model_dict[f'CAMERA_{self.event_camera}'].stop_detection()
-            self.window[f'-CAMERA_{self.event_camera}_FEED-'].update(filename=self.get_random_image_from_background_image_list(), size=(720, 405))
+            self.window[f'-CAMERA_{self.event_camera}_FEED-'].update(filename=r'Jason.png', size=(720, 480))
             self.window[f'-CAMERA_{self.event_camera}_SHOWFEED-'].update(False, disabled=True)
 
         if self.lit_subsystem_dict[f'CAMERA_{self.event_camera}'].client_conn:
@@ -84,8 +67,7 @@ class LITGuiEventHandler:
             self.object_detection_model_dict[f'CAMERA_{self.event_camera}'].set_window(self.window)
         else:
             self.object_detection_model_dict[f'CAMERA_{self.event_camera}'].set_window(None)
-            # time.sleep(2)
-            self.window[f'-CAMERA_{self.event_camera}_FEED-'].update(filename=self.get_random_image_from_background_image_list(), size=(720, 405))
+            self.window[f'-CAMERA_{self.event_camera}_FEED-'].update(filename=r'Lebron.png', size=(720, 480))
         return
     
     def on_manual_control_event(self):
@@ -102,7 +84,6 @@ class LITGuiEventHandler:
         if self.lit_subsystem_dict[f'CAMERA_{self.event_camera}'].client_conn and not self.lit_subsystem_dict[f'CAMERA_{self.event_camera}'].auto_status:
             self.lit_subsystem_dict[f'CAMERA_{self.event_camera}'].send_data_for_led_addressing(True) #this breaks the other loop somehow
         else:
-            # time.sleep(.25)
             self.lit_subsystem_dict[f'CAMERA_{self.event_camera}'].send_data_for_led_addressing(True)
         return
     
@@ -112,8 +93,7 @@ class LITGuiEventHandler:
             if not self.lit_subsystem_dict[f'CAMERA_{self.event_camera}'].auto_status:
                 self.lit_subsystem_dict[f'CAMERA_{self.event_camera}'].send_data_for_led_addressing(True)
             else:
-                # time.sleep(.25)
-                self.lit_subsystem_dict[f'CAMERA_{self.event_camera}'].send_data_for_led_addressing(True)
+                 self.lit_subsystem_dict[f'CAMERA_{self.event_camera}'].send_data_for_led_addressing(True)
 
 
     def on_manually_control_led_range_event(self):  
@@ -128,7 +108,6 @@ class LITGuiEventHandler:
             if not self.lit_subsystem_dict[f'CAMERA_{self.event_camera}'].auto_status:
                 self.lit_subsystem_dict[f'CAMERA_{self.event_camera}'].send_data_for_led_addressing(True)
             else:
-                # time.sleep(.25)
                 self.lit_subsystem_dict[f'CAMERA_{self.event_camera}'].send_data_for_led_addressing(True)
         return 
 
@@ -150,7 +129,6 @@ class LITGuiEventHandler:
             if not self.lit_subsystem_dict[f'CAMERA_{self.event_camera}'].auto_status:
                 self.lit_subsystem_dict[f'CAMERA_{self.event_camera}'].send_data_for_led_addressing(True)
             else:
-                # time.sleep(.25)
                 self.lit_subsystem_dict[f'CAMERA_{self.event_camera}'].send_data_for_led_addressing(True)
         return
     
@@ -165,10 +143,25 @@ class LITGuiEventHandler:
             if not self.lit_subsystem_dict[f'CAMERA_{self.event_camera}'].auto_status:
                 self.lit_subsystem_dict[f'CAMERA_{self.event_camera}'].send_data_for_led_addressing(True)
             else:
-                # time.sleep(.25)
                 self.lit_subsystem_dict[f'CAMERA_{self.event_camera}'].send_data_for_led_addressing(True)
 
-            
+    def handle_server_disconnect(self):
+        self.lit_subsystem_dict[f'CAMERA_{self.event_camera}'].client_conn.close()
+        self.lit_subsystem_dict[f'CAMERA_{self.event_camera}'].client_conn = False
+        self.lit_subsystem_dict[f'CAMERA_{self.event_camera}'].send_lock = False
+        if self.lit_subsystem_dict[f'CAMERA_{self.event_camera}'].object_detection_model:
+            self.lit_subsystem_dict[f'CAMERA_{self.event_camera}'].object_detection_model.client_conn = False
+            self.lit_subsystem_dict[f'CAMERA_{self.event_camera}'].object_detection_model.thread_lock = False
+        self.window[f'-CAMERA_{self.event_camera}_CONNECTIONSTATUS-'].update(f"Server Connection Status: Disconnected")
+        self.window[f'-CAMERA_{self.camera_idx}_RECONNECT'].update(disabled=False)
+        return
+        
+    def handle_server_reconnect_attempt(self):
+        self.lit_subsystem_dict[f'CAMERA_{self.event_camera}'].attempt_to_create_client_conn()
+        if self.lit_subsystem_dict[f'CAMERA_{self.event_camera}'].client_conn:
+            self.window[f'-CAMERA_{self.event_camera}_CONNECTIONSTATUS-'].update(f"Server Connection Status: Connected")
+            self.window[f'-CAMERA_{self.camera_idx}_RECONNECT'].update(disabled=True)
+    
     def disable_all_manual_options_of_subsystem(self):
         """Disable all manual options of the subsystem panel where this event originated."""
         self.disable_all_led_range_checkboxs()
@@ -296,38 +289,17 @@ class LITGuiEventHandler:
             elif '_LEDSLIDER-' in self.event and 'Release' not in self.event:
                 self.on_manually_control_led_range_slider_event()
             elif '_LEDSLIDER-' in self.event and 'Release' in self.event:
-                # time.sleep(0.5)
                 self.on_manually_control_led_range_slider_event()
             elif '_BRIGHTNESSSLIDER' in self.event and 'Release' not in self.event:
                 self.on_manually_control_led_brightness_slider_event()
             elif '_BRIGHTNESSSLIDER' in self.event and 'Release' in self.event:
-                # time.sleep(0.5)
                 self.on_manually_control_led_brightness_slider_event()
             elif 'UPDATE_' in self.event and '_FRAME' in self.event:
                 img_bytes = self.get_value_of_element_from_event()
                 self.window[f'-CAMERA_{self.event_camera}_FEED-'].update(data=img_bytes)
-            elif '_HANDGESTURETURNONALLLEDS' in self.event:
-                self.window[f'-CAMERA_{self.event_camera}_TURNONALLLEDs-'].update(self.values[f'-CAMERA_{self.event_camera}_HANDGESTURETURNONALLLEDS-'])
-                self.on_turn_on_all_leds()
-            elif '_HANDGESTUREINCREASEBRIGHTNESS' in self.event:
-                self.window[f'-CAMERA_{self.event_camera}_BRIGHTNESSSLIDER-'].update(self.values[f'-CAMERA_{self.event_camera}_BRIGHTNESSSLIDER-'] + 1)
-                self.on_manually_control_led_brightness_slider_event()    
-            elif '_HANDGESTUREDECREASEBRIGHTNESS' in self.event:        
-                self.window[f'-CAMERA_{self.event_camera}_BRIGHTNESSSLIDER-'].update(self.values[f'-CAMERA_{self.event_camera}_BRIGHTNESSSLIDER-'] - 1)
-                self.on_manually_control_led_brightness_slider_event()    
-            elif '_HANDGESTUREINCREASELEDRANGE' in self.event:
-                self.window[f'-CAMERA_{self.event_camera}_LEDSLIDER-'].update(self.values[f'-CAMERA_{self.event_camera}_LEDSLIDER-'] + 1)
-                self.on_manually_control_led_range_slider_event()
-            elif '_HANDGESTUREDECREASELEDRANGE' in self.event:
-                self.window[f'-CAMERA_{self.event_camera}_LEDSLIDER-'].update(self.values[f'-CAMERA_{self.event_camera}_LEDSLIDER-'] - 1)
-                self.on_manually_control_led_range_slider_event()
-            elif '_HANDGESTURELEDRANGELEFTRIGHT' in self.event:
-                self.window[f'-CAMERA_{self.event_camera}_SLIDER_LEFT_TO_RIGHT-'].update(True)
-                self.turn_right_to_left_status_to_false()
-                self.on_manually_control_led_range_slider_event()
-            elif '_HANDGESTURELEDRANGERIGHTLEFT' in self.event:
-                self.window[f'-CAMERA_{self.event_camera}_SLIDER_RIGHT_TO_LEFT-'].update(True)
-                self.turn_left_to_right_status_to_false()
-                self.on_manually_control_led_range_slider_event()
+            elif f'-SERVER_{self.event_camera}_DISCONNECTED-' in self.event:
+                self.handle_server_disconnect()
+            elif f'-CAMERA_{self.event_camera}_RECONNECT' in self.event:
+                self.handle_server_reconnect_attempt()
         return
     
