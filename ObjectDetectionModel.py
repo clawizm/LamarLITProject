@@ -309,7 +309,7 @@ class ObjectDetectionModel:
         else:
             self.focal_length = focal_length
         self.mp_hands = mp.solutions.hands
-        self.hands = self.mp_hands.Hands(static_image_mode=True, max_num_hands=1, min_detection_confidence=0.5)
+        self.hands = self.mp_hands.Hands(static_image_mode=True, max_num_hands=1, min_detection_confidence=0.3)
         self.keypoint_classifier = KeyPointClassifier(gesture_tflite_path)
         with open(gesture_label_path,
                 encoding='utf-8-sig') as f:
@@ -677,7 +677,7 @@ class ObjectDetectionModel:
         # Load the TensorFlow Lite model with Edge TPU support.
         interpreter = Interpreter(
             model_path=model_path,
-            experimental_delegates=[load_delegate('edgetpu.dll')]
+            experimental_delegates=[load_delegate("edgetpu.dll")]
         )        
         return interpreter
 
