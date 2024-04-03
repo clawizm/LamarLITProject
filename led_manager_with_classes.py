@@ -197,6 +197,7 @@ class LEDPanels:
                 self.auto_turn_off_led_ranges(turn_off_ranges, True)
                 if self.manual_led_with_sliders:
                     self.manual_led_ranges.remove(self.manual_led_with_sliders)
+                    
     def update_auto_mode_status(self, auto_mode_status: bool):
         """Update the state of the auto mode status attribute."""
         self.auto_mode_status = auto_mode_status
@@ -250,6 +251,7 @@ def find_missing_numbers_as_ranges_tuples(ranges) -> list[tuple]:
         missing_ranges.append((range_start, range_end))
     
     return missing_ranges
+
 def is_overlap(range1, range2):
     """Check if range1 overlaps with range2."""
     if (range1[0] < range2[1]) and (range1[1] > range2[0]):

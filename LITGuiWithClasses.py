@@ -4,8 +4,13 @@ import typing
 from LITGuiEventHandler import LITGuiEventHandler
 import ObjectDetectionModel
 from ObjectDetectionModel import ObjectDetectionModel
+import threading
+import socket
+import pickle
 from LITSubsystemInterface import LITSubsystemData
 import math
+import os
+import numpy as np
 # used to prevent popup froms occur while debugging and poential errors that are inevitable but caught with try and excepts from also creating annoying popups
 sg.set_options(suppress_raise_key_errors=True, suppress_error_popups=True, suppress_key_guessing=True)
 
@@ -19,13 +24,13 @@ class LITGUI(LITGuiEventHandler):
     """
 
 
-    def __init__(self, lit_subsystem_data: typing.Union[LITSubsystemData, list[LITSubsystemData]]):
+    def __init__(self, lit_subsystem_data: typing.Union[LITSubsystemData, list[LITSubsystemData]], background_images_dir: str):
         """Creates a GUI displaying Camera Feeds for each LITSubsystemData instance passed.
         
         Parameters:
         - lit_subsystem_data (typing.Union[LITSubsystemData, list[LITSubsystemData]]): Will create a seperate section in the GUI for each subsystem passed, whether in a list of Length N, or 
         if a single instance of LITSubsystemData is passed."""
-        LITGuiEventHandler.__init__(self)
+        LITGuiEventHandler.__init__(self, background_images_dir)
         self.led_tuples_dict_of_list: dict[str, list[tuple[int, int]]] = {}
         self.object_detection_model_dict: dict[str, typing.Union[ObjectDetectionModel, None]] = {}
         self.lit_subsystem_dict: dict[str, LITSubsystemData] = {}
@@ -33,13 +38,10 @@ class LITGUI(LITGuiEventHandler):
             final_layout = self.create_gui_from_camera_instance(lit_subsystem_data)
             self.window = sg.Window('Test', final_layout, finalize=True, resizable=False)
             self.bind_all_slider_release_events(lit_subsystem_data.camera_idx)
-            lit_subsystem_data.gui_window = self.window
         elif isinstance(lit_subsystem_data, list):
             final_layout = self.create_gui_from_cameras_list(lit_subsystem_data)
             self.window = sg.Window('Test', final_layout, finalize=True, resizable=False)
             self.bind_all_slider_release_events([lit_subsystem.camera_idx for lit_subsystem in lit_subsystem_data])
-            for lit_subsystem in lit_subsystem_data:
-                lit_subsystem.gui_window = self.window
         self.set_lit_subsystems_windows(lit_subsystem_data)
         return
 
@@ -111,19 +113,15 @@ class LITGUI(LITGuiEventHandler):
         self.gui_image_preview_width = lit_subsystem_data.image_preview_width
         self.gui_image_preview_height = lit_subsystem_data.image_preview_height
         self.lit_subsystem_dict[f'CAMERA_{self.camera_idx}'] = lit_subsystem_data
-        if lit_subsystem_data.client_conn:
-            connection_status = 'Connected'
-        else:
-            connection_status = 'Disconnected'
         self.add_object_detection_model_to_gui(lit_subsystem_data.object_detection_model)
         led_tuples_list = self.create_led_tuple_range_list()
         self.led_tuples_dict_of_list[f"CAMERA_{self.camera_idx}"] =led_tuples_list
         leds_range_option_with_frame = self.create_control_led_range_frame()
         slider_led_range_option_with_frame = self.create_led_slider_range_frame()
         slider_brightness_range_option_with_frame = self.create_brightness_slider_range_frame()
-        control_buttons_row = self.create_enable_controls_row(connection_status)
+        control_buttons_row = self.create_enable_controls_row()
         image_preview_section = self.create_image_preview_section()
-        layout = [[control_buttons_row], [leds_range_option_with_frame], [slider_led_range_option_with_frame], [slider_brightness_range_option_with_frame]]
+        layout = [control_buttons_row, [leds_range_option_with_frame], [slider_led_range_option_with_frame], [slider_brightness_range_option_with_frame]]
         controller_options_section_layout = self.create_controller_options_section_wrapped_in_frame(layout)
 
         final_layout = self.create_final_subsystem_section_layout_wrapped_in_frame(image_preview_section, controller_options_section_layout)
@@ -132,27 +130,22 @@ class LITGUI(LITGuiEventHandler):
     def create_image_preview_section(self):
         """Creates the image element for the current Subsystem Frame being created. This is video feed will be displayed."""
         if self.camera_idx == 0:
-            camera_preview = [sg.Image(filename=r'C:\Users\00239148\PythonProjects\LITProject\Jason.png',
+            camera_preview = [sg.Image(filename=r'BackgroundImages\gon.png',
                                         key=f'-CAMERA_{self.camera_idx}_FEED-', size=(self.gui_image_preview_width, self.gui_image_preview_height))] 
         else:
-            camera_preview = [sg.Image(filename=r'C:\Users\00239148\PythonProjects\LITProject\Lebron.png', 
+            camera_preview = [sg.Image(filename=r'BackgroundImages\killua.png', 
                                        key=f'-CAMERA_{self.camera_idx}_FEED-', size=(self.gui_image_preview_width, self.gui_image_preview_height))]
+
         return camera_preview
 
-    def create_enable_controls_row(self, connection_status: bool)->list[sg.Checkbox]:
+    def create_enable_controls_row(self)->list[sg.Checkbox]:
         """Creates the main controls row, which contains the checkboxes for enabling manual control of the LED subsystem, Turning all LEDs on, Autonomous Mode, and showing the camera feed."""
-        if connection_status == 'Connected':
-            reconnect_button_status = True #this is backwards because PySimpleGUI ask for Disabled status
-        else:
-            reconnect_button_status = False
-        control_buttons_row = [[sg.Text(f"Server Connection Status: {connection_status}", size=(30,1), key=f'-CAMERA_{self.camera_idx}_CONNECTIONSTATUS-', enable_events=True),
-                            sg.Button('Attempt To Reconnect To Server', 0, key=f'-CAMERA_{self.camera_idx}_RECONNECT', enable_events=True, disabled=reconnect_button_status)],
-                            [sg.Checkbox(f"Manually Control LIT Subsystem {self.camera_idx}", size=(23,1), key=f'-CAMERA_{self.camera_idx}_MANUALSTATUS-', enable_events=True), 
-                            sg.Checkbox(f"Turn On All LEDs", size=(15,1), key=f'-CAMERA_{self.camera_idx}_TURNONALLLEDs-', enable_events=True, disabled=True),
-                            sg.Checkbox(f"Autonomous Mode", size=(13,1), key=f'-CAMERA_{self.camera_idx}_AUTONOMOUSMODE-', enable_events=True), 
-                            sg.Checkbox(f"Show Camera Feed", size=(15,1), key=f'-CAMERA_{self.camera_idx}_SHOWFEED-', enable_events=True, disabled=True)]]
-        control_buttons_row_frame = sg.Frame('Main Controls', control_buttons_row, expand_x=True)  
-        return control_buttons_row_frame
+        control_buttons_row = [sg.Checkbox(f"Manually Control LIT Subsystem {self.camera_idx}", size=(23,1), key=f'-CAMERA_{self.camera_idx}_MANUALSTATUS-', enable_events=True), 
+                               sg.Checkbox(f"Turn On All LEDs", size=(15,1), key=f'-CAMERA_{self.camera_idx}_TURNONALLLEDs-', enable_events=True, disabled=True),
+                                sg.Checkbox(f"Autonomous Mode", size=(13,1), key=f'-CAMERA_{self.camera_idx}_AUTONOMOUSMODE-', enable_events=True), 
+                                sg.Checkbox(f"Show Camera Feed", size=(15,1), key=f'-CAMERA_{self.camera_idx}_SHOWFEED-', enable_events=True, disabled=True)]
+        
+        return control_buttons_row
 
     def create_control_led_range_frame(self)->sg.Frame:
         """Creates the Frame containing checkboxes for manually controlling sections of the LED Subsystem with checkboxes which each refer to a specific section."""
@@ -166,6 +159,7 @@ class LITGUI(LITGuiEventHandler):
         number_of_checkboxes_per_row = math.ceil(self.gui_image_preview_width / total_text_len) 
         leds_range_option_in_frame = list(split(leds_range_option_in_frame, number_of_checkboxes_per_row))
         leds_range_option_with_frame = sg.Frame('Manually Control LED Ranges', leds_range_option_in_frame, expand_x=True)
+
         return leds_range_option_with_frame
 
     def create_led_slider_range_frame(self)->sg.Frame:
@@ -175,6 +169,7 @@ class LITGUI(LITGuiEventHandler):
                                                 [sg.Slider((0,self.number_of_leds), 0,1, orientation='h', size=(20,15), key=f'-CAMERA_{self.camera_idx}_LEDSLIDER-',\
                                                             enable_events=True, expand_x=True, disabled=True)]]
         slider_led_range_option_with_frame = sg.Frame('Adjust LEDs Consecutively', slider_led_range_option_inside_frame, expand_x=True)
+        
         return slider_led_range_option_with_frame
 
     def create_brightness_slider_range_frame(self)->sg.Frame:
@@ -182,6 +177,7 @@ class LITGUI(LITGuiEventHandler):
         slider_brightness_range_option_inside_frame = [[sg.Slider((0, 100), 0, 1, orientation='h', size=(20,15), key=f'-CAMERA_{self.camera_idx}_BRIGHTNESSSLIDER-', \
                                                                    enable_events=True, expand_x=True, disabled=True)]]
         slider_brightness_range_option_with_frame = sg.Frame('Adjust Brightness of LEDs (in Percentages)', slider_brightness_range_option_inside_frame, expand_x=True)
+        
         return slider_brightness_range_option_with_frame
 
     def create_controller_options_section_wrapped_in_frame(self, layout_list: list)->sg.Frame:
@@ -200,6 +196,7 @@ class LITGUI(LITGuiEventHandler):
     def create_gui_from_camera_instance(self, lit_subsystem_data: LITSubsystemData)->list[list[sg.Frame]]:
         """Creates a LITSubsystem Frame which is displayed in the GUI. Called when user provides only one LITSubsystem data instance to the constructor."""
         return [[self.create_camera_frame(lit_subsystem_data)]]
+
 
 
 

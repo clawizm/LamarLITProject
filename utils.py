@@ -59,7 +59,14 @@ class AutoLEDData:
 
 
 class SystemLEDData:
+    """Stores all LED Data relevant to a system, including ManualLEDData and AutoLEDData"""
     def __init__(self, manual_led_data: typing.Union[ManualLEDData, None], auto_led_data_list: typing.Union[list[AutoLEDData], None]):
+        """Initializes attibutes used to store an instance of the ManualLEDData class, and a list of AutoLEDData instances.
+        
+        Parameters:
+        - manual_led_data (typing.Union[ManualLEDData, None]): An instance of the ManualLEDData class used to store LED Data relevant to the GUI and the selections made on it.
+        - auto_led_data_list (typing.Union[list[AutoLEDData], None]): A list of AutoLEDData instance to store LED data relevant to objects detected in the camera feed."""
+
         if manual_led_data:
             self.manual_led_data = manual_led_data
         else:
@@ -72,6 +79,17 @@ class SystemLEDData:
         return
     
     def update_led_data_for_sending(self, auto_status: bool, manual_status: bool, num_of_leds: int = 256):
+        """Called whenever data is being attempted to be sent over a socket connection to a server used to address the LEDs individually. This method will update the list of LEDs to be turned off and on, and at what respective
+        brightness. Manually controlled LEDs are controlled with the same brightness, and are set to be never turned off, while AutoLED data is ignored if it is part of a manual LED range. Each AutoLED data instance contains
+        its own brightness data, and so therefore these list can not be combined, but must be stored seperately in a list for sending over a socket connection. Lastly, this method generates a list of LED ranges that should be turned 
+        off, and then stores this list in the list of list sent over the socket connection.
+        
+        Parameters:
+        
+        auto_status (bool): A boolean containing the state of the system, where true represents autonomous mode being enabled.
+        manual_status (bool): A boolean containing the state of the system, where true represents Manual control mode being enabled.
+        num_of_leds (int): The nummber of LEDs stored in a singular panel, but must be oreiented in the 32x8 style.
+        """
         if auto_status and manual_status:
             self.full_manual_list = self.manual_led_data.generate_full_manual_led_list()
             if self.auto_led_data_list:
@@ -107,7 +125,9 @@ def is_overlap(range1, range2):
         return True
     return False
 
-def find_missing_numbers_as_ranges_tuples(ranges, all_numbers: int) -> typing.Union[list[tuple], None]:
+def find_missing_numbers_as_ranges_tuples(ranges: list[tuple], all_numbers: int) -> typing.Union[list[tuple], None]:
+    """Returns a list of tuples representing ranges that are not present in the ranges argument provide using the all_numbers arguement as the constrains for the range."""
+
     if not ranges:
         return [(0, all_numbers)]
 
@@ -144,7 +164,13 @@ def find_missing_numbers_as_ranges_tuples(ranges, all_numbers: int) -> typing.Un
     return missing_ranges
     
 
-def remove_overlapping_ranges_between_auto_led_and_manual_leds(manual_led_tuple_list: list[tuple[int, int]], auto_led_data_list: list[AutoLEDData]):
+def remove_overlapping_ranges_between_auto_led_and_manual_leds(manual_led_tuple_list: list[tuple[int, int]], auto_led_data_list: list[AutoLEDData])->list[AutoLEDData]:
+    """Updates the auto LED data range to not include data relevant to the manual ranges selected.
+    
+    Parameters:
+    manual_led_tuple_list (list[tuple[int, int]]): A list of tuple ranges the user has selected in the GUI to be manually turned on.
+    auto_led_data_list (list[AutoLEDData]): A list of AutoLEDData instances each representing a person detected in the current frame."""
+
     if not auto_led_data_list and not manual_led_tuple_list:
         return None
     elif not manual_led_tuple_list:
@@ -162,11 +188,11 @@ def remove_overlapping_ranges_between_auto_led_and_manual_leds(manual_led_tuple_
     return auto_led_data_list
 
 
-def adjust_overlap(range1, range2):
+def adjust_overlap(range1: tuple[int, int], range2: tuple[int, int]):
     """
     Adjusts range1 to ensure there's no overlap with range2.
-    :param range1: First range tuple.
-    :param range2: Second range tuple.
+    :param range1 (tuple[int, int]): First range tuple.
+    :param range2 (tuple[int, int]): Second range tuple.
     :return: Adjusted range1 tuple.
     """
     start1, end1 = range1
