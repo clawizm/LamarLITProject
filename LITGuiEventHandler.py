@@ -61,7 +61,14 @@ class LITGuiEventHandler:
         Value is set to the event_camera Attribute."""
         self.event_camera = self.event.split('_')[1]
         return 
-
+    
+    def on_hand_gesture_detection(self):
+        try:
+            self.object_detection_model_dict[f'CAMERA_{self.event_camera}'].hand_gesture_recognition = self.get_value_of_element_from_event()
+        except:
+            pass
+        return
+    
     def on_autonomous_mode_event(self):
         """Handles an event in which the user has pressed the _AUTONOMOUSMODE checkbox in one of the Subsystems displayed on the GUI. This will either stop or start detection in the current subsystem based on the 
         value of the checkbox. It will also alter the status of the show feed checkbox."""
@@ -71,11 +78,13 @@ class LITGuiEventHandler:
             if self.object_detection_model_dict[f'CAMERA_{self.event_camera}']:
                 self.object_detection_model_dict[f'CAMERA_{self.event_camera}'].start_detection()
             self.window[f'-CAMERA_{self.event_camera}_SHOWFEED-'].update(True, disabled=False)
+            self.window[f'-CAMERA_{self.event_camera}_HANDGESTUREDETECTION-'].update(disabled=False)
         else:
             if self.object_detection_model_dict[f'CAMERA_{self.event_camera}']:
                 self.object_detection_model_dict[f'CAMERA_{self.event_camera}'].stop_detection()
             self.window[f'-CAMERA_{self.event_camera}_FEED-'].update(filename=self.get_random_image_from_background_image_list(), size=(720, 405))
             self.window[f'-CAMERA_{self.event_camera}_SHOWFEED-'].update(False, disabled=True)
+            self.window[f'-CAMERA_{self.event_camera}_HANDGESTUREDETECTION-'].update(disabled=True)
 
         if self.lit_subsystem_dict[f'CAMERA_{self.event_camera}'].client_conn:
             self.lit_subsystem_dict[f'CAMERA_{self.event_camera}'].auto_status = self.values[f'-CAMERA_{self.event_camera}_AUTONOMOUSMODE-']
@@ -293,6 +302,8 @@ class LITGuiEventHandler:
                 self.on_manual_control_event()
             elif 'AUTONOMOUSMODE' in self.event:
                 self.on_autonomous_mode_event()
+            elif '_HANDGESTUREDETECTION' in self.event:
+                self.on_hand_gesture_detection()
             elif '_TURNONALLLEDs' in self.event:
                 self.on_turn_on_all_leds()
             elif '_LEDRANGE_' in self.event:

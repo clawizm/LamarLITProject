@@ -298,7 +298,7 @@ class ObjectDetectionModel:
     def __init__(self, model_path: str, use_edge_tpu: bool, camera_index: int, label_path: str, 
                  min_conf_threshold: float= 0.5,window: typing.Union[sg.Window, None]=None, image_window_name: typing.Union[str, None]=None, 
                  client_conn: socket.socket = None, thread_lock: threading.Lock = None, ref_person_width: int = 20, hfov: int = 89, vfov:int = 129.46, 
-                 resolution: tuple[int, int] =(640,360), focal_length: float = 0,hand_gesture_recognition: bool = True, gesture_tflite_path: typing.Union[str, None] = r'ModelFiles\keypoint_classifier.tflite', 
+                 resolution: tuple[int, int] =(640,360), focal_length: float = 0,hand_gesture_recognition: bool = False, gesture_tflite_path: typing.Union[str, None] = r'ModelFiles\keypoint_classifier.tflite', 
                  gesture_label_path: typing.Union[str, None] = r'ModelFiles\keypoint_classifier_label.csv') -> None:
         """Creates an Object for performing object detection on a camera feed. Uses either an EdgeTPU or CPU to perform computations.
         
@@ -340,8 +340,7 @@ class ObjectDetectionModel:
             self.focal_length = focal_length_finder(resolution[0], hfov)
         else:
             self.focal_length = focal_length
-        if hand_gesture_recognition:
-            self.initalize_hand_recognition_model(gesture_tflite_path, gesture_label_path)
+        self.initalize_hand_recognition_model(gesture_tflite_path, gesture_label_path)
         self.hand_gesture_recognition = hand_gesture_recognition
         return
     

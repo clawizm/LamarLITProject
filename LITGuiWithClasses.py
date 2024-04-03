@@ -140,8 +140,8 @@ class LITGUI(LITGuiEventHandler):
 
     def create_enable_controls_row(self)->list[sg.Checkbox]:
         """Creates the main controls row, which contains the checkboxes for enabling manual control of the LED subsystem, Turning all LEDs on, Autonomous Mode, and showing the camera feed."""
-        control_buttons_row = [sg.Checkbox(f"Manually Control LIT Subsystem {self.camera_idx}", size=(23,1), key=f'-CAMERA_{self.camera_idx}_MANUALSTATUS-', enable_events=True), 
-                               sg.Checkbox(f"Turn On All LEDs", size=(15,1), key=f'-CAMERA_{self.camera_idx}_TURNONALLLEDs-', enable_events=True, disabled=True),
+        control_buttons_row = [sg.Checkbox(f"Manually Control LIT Subsystem {self.camera_idx}", size=(23,1), key=f'-CAMERA_{self.camera_idx}_MANUALSTATUS-', enable_events=True),
+                               sg.Checkbox(f"Hand Gesture Detection", size=(18,1), key=f'-CAMERA_{self.camera_idx}_HANDGESTUREDETECTION-', enable_events=True, disabled=True),
                                 sg.Checkbox(f"Autonomous Mode", size=(13,1), key=f'-CAMERA_{self.camera_idx}_AUTONOMOUSMODE-', enable_events=True), 
                                 sg.Checkbox(f"Show Camera Feed", size=(15,1), key=f'-CAMERA_{self.camera_idx}_SHOWFEED-', enable_events=True, disabled=True)]
         
@@ -165,7 +165,8 @@ class LITGUI(LITGuiEventHandler):
     def create_led_slider_range_frame(self)->sg.Frame:
         """Creates the Frame containing checkboxes and a slider for manually controlling consecutive leds in the LED Subsystem."""
         slider_led_range_option_inside_frame = [[sg.Checkbox(f'Adjust LEDs Left To Right', size=(23,1), key=f'-CAMERA_{self.camera_idx}_SLIDER_LEFT_TO_RIGHT-', enable_events=True, default=True, disabled=True),
-                                                 sg.Checkbox(f'Adjust LEDs Right To Left', size=(23,1), key=f'-CAMERA_{self.camera_idx}_SLIDER_RIGHT_TO_LEFT-', enable_events=True, disabled=True)],
+                                                 sg.Checkbox(f'Adjust LEDs Right To Left', size=(23,1), key=f'-CAMERA_{self.camera_idx}_SLIDER_RIGHT_TO_LEFT-', enable_events=True, disabled=True),
+                                                 sg.Checkbox(f"Turn On All LEDs", size=(15,1), key=f'-CAMERA_{self.camera_idx}_TURNONALLLEDs-', enable_events=True, disabled=True)],
                                                 [sg.Slider((0,self.number_of_leds), 0,1, orientation='h', size=(20,15), key=f'-CAMERA_{self.camera_idx}_LEDSLIDER-',\
                                                             enable_events=True, expand_x=True, disabled=True)]]
         slider_led_range_option_with_frame = sg.Frame('Adjust LEDs Consecutively', slider_led_range_option_inside_frame, expand_x=True)
