@@ -1,0 +1,4 @@
+mediapipe==0.10.18
+tensorflow==2.18.10
+opencv-python==4.10.0.84
+PySimpleGUI==5.0.7

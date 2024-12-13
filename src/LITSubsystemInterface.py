@@ -90,7 +90,6 @@ class LITSubsystemData():
         if self.force_all_leds_on and self.manual_status:
             data = [0, [(0,self.number_of_leds)], 1, []]
 
-
         elif self.auto_status or self.manual_status:
             self.system_led_data.update_led_data_for_sending(self.auto_status, self.manual_status, self.number_of_leds)                    
             if manual_event:
@@ -109,8 +108,6 @@ class LITSubsystemData():
                 data = [0, [], 0, [(0,self.number_of_leds)]]
         else:
             data = [0, [], 0, [(0,self.number_of_leds)]]
-
-        
         pickle_data = pickle.dumps(data)
         if self.send_lock:
             with self.send_lock:

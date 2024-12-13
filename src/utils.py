@@ -192,6 +192,7 @@ def focal_length_finder(camera_video_width: int, horizontal_fov: int)->float:
     fov_rad = math.radians(horizontal_fov)
     return camera_video_width / (2 * math.tan(fov_rad / 2))
 
+
 if __name__ == '__main__':
     manual_led_data = ManualLEDData()
     manual_led_data.add_led_range((0, 32))
